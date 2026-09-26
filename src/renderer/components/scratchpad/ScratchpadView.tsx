@@ -53,6 +53,9 @@ interface LoadedFile {
 
 const ROOT_DIR = '';
 const POLL_INTERVAL_MS = 3000;
+const TREE_DEFAULT_WIDTH = 288;
+const TREE_MIN_WIDTH = 180;
+const TREE_MAX_WIDTH = 720;
 const IMAGE_EXTENSION_RE = /\.(png|jpe?g|gif|webp|bmp|ico|svg)$/i;
 const MARKDOWN_EXTENSION_RE = /\.mdx?$/i;
 
@@ -99,6 +102,27 @@ export const ScratchpadView = ({
   const [loadedFile, setLoadedFile] = useState<LoadedFile | null>(null);
   const [markdownMode, setMarkdownMode] = useState<'preview' | 'code'>('preview');
   const [refreshing, setRefreshing] = useState(false);
+  const [treeWidth, setTreeWidth] = useState(TREE_DEFAULT_WIDTH);
+  const [resizeOrigin, setResizeOrigin] = useState<{ x: number; width: number } | null>(null);
+
+  useEffect(() => {
+    if (!resizeOrigin) return;
+    const handleMouseMove = (e: MouseEvent): void => {
+      const next = resizeOrigin.width + e.clientX - resizeOrigin.x;
+      setTreeWidth(Math.min(TREE_MAX_WIDTH, Math.max(TREE_MIN_WIDTH, next)));
+    };
+    const handleMouseUp = (): void => setResizeOrigin(null);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    return (): void => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [resizeOrigin]);
 
   const loadDir = useCallback(
     async (relativeDir: string): Promise<void> => {
@@ -303,14 +327,15 @@ export const ScratchpadView = ({
   return (
     <div className="flex flex-1 overflow-hidden">
       <div
-        className="flex w-72 shrink-0 flex-col border-r"
+        className="relative flex shrink-0 flex-col border-r"
         style={{
           backgroundColor: 'var(--color-surface-sidebar)',
           borderColor: 'var(--color-border)',
+          width: `${treeWidth}px`,
         }}
       >
         <div className="flex items-center gap-1 px-3 pb-1 pt-3">
-          <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+          <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wider text-text-muted">
             Scratchpad {fileCount > 0 && <span>({fileCount})</span>}
           </span>
           {canOpenInFileManager && (
@@ -343,6 +368,19 @@ export const ScratchpadView = ({
           </div>
         )}
         <div className="flex-1 overflow-y-auto pb-2">{renderEntries(ROOT_DIR, 0)}</div>
+        <button
+          type="button"
+          aria-label="Resize file tree"
+          title="Drag to resize, double-click to reset"
+          className={`absolute right-0 top-0 h-full w-1 cursor-col-resize border-0 bg-transparent p-0 transition-colors hover:bg-blue-500/50 ${
+            resizeOrigin ? 'bg-blue-500/50' : ''
+          }`}
+          onMouseDown={(e): void => {
+            e.preventDefault();
+            setResizeOrigin({ x: e.clientX, width: treeWidth });
+          }}
+          onDoubleClick={(): void => setTreeWidth(TREE_DEFAULT_WIDTH)}
+        />
       </div>
 
       <div className="flex flex-1 flex-col overflow-hidden">
